@@ -98,9 +98,17 @@ jobs:
               warehouse='DEV_WH',
               database='SUPPLY_CHAIN'
           )
-          conn.cursor().execute(f"DROP SCHEMA IF EXISTS SUPPLY_CHAIN.PR_{os.environ['GITHUB_RUN_ID']}")
+
+          run_id = os.environ['GITHUB_RUN_ID']
+          schemas = [
+                f"PR_{run_id}_ANALYTICS",
+                f"PR_{run_id}_STAGING",
+                f"PR_{run_id}",  # fallback
+            ]
+          for schema in schemas:
+            conn.cursor().execute(f"DROP SCHEMA IF EXISTS SUPPLY_CHAIN.{schema}")
+            print(f"Dropped schema {schema}")
           conn.close()
-          print(f"Dropped schema PR_{os.environ['GITHUB_RUN_ID']}")
           EOF
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
