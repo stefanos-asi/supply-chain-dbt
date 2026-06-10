@@ -9,7 +9,7 @@ on:
 jobs:
   dbt_run:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -22,15 +22,10 @@ jobs:
       - name: Install dbt
         run: pip install dbt-snowflake==1.8.4
 
-      - name: Write private key file
-        run: |
-          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > private_key.pem
-          chmod 600 private_key.pem
-
       - name: Set up dbt profiles
         run: |
           mkdir -p ~/.dbt
-          cat > ~/.dbt/profiles.yml << EOF
+          cat > ~/.dbt/profiles.yml << 'EOF'
           supply_chain_dbt:
             target: ${{ github.ref == 'refs/heads/main' && 'prod' || 'ci' }}
             outputs:
@@ -39,7 +34,7 @@ jobs:
                 account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
                 user: "${{ secrets.DBT_USER }}"
                 role: DBT_ROLE
-                private_key_path: private_key.pem
+                private_key: "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}"
                 private_key_passphrase: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"
                 database: SUPPLY_CHAIN
                 schema: "PR_${{ github.run_id }}"
@@ -50,7 +45,7 @@ jobs:
                 account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
                 user: "${{ secrets.DBT_USER }}"
                 role: DBT_ROLE
-                private_key_path: private_key.pem
+                private_key: "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}"
                 private_key_passphrase: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"
                 database: SUPPLY_CHAIN
                 schema: PROD
@@ -59,38 +54,57 @@ jobs:
           EOF
 
       - name: Install dbt packages
+        working-directory: supply_chain_dbt
         run: dbt deps
 
       - name: Seed data
+        working-directory: supply_chain_dbt
         run: dbt seed
 
       - name: Run dbt (PR branch)
         if: github.event_name == 'pull_request'
+        working-directory: supply_chain_dbt
         run: dbt build --target ci
 
       - name: Run dbt (main branch)
         if: github.ref == 'refs/heads/main'
+        working-directory: supply_chain_dbt
         run: dbt build --target prod
 
       - name: Drop CI schema (cleanup)
         if: github.event_name == 'pull_request'
+        working-directory: supply_chain_dbt
         run: |
           python - <<EOF
           import snowflake.connector
           import os
+
+          private_key = os.environ['SNOWFLAKE_PRIVATE_KEY']
+
+          from cryptography.hazmat.primitives.serialization import load_pem_private_key
+          from cryptography.hazmat.backends import default_backend
+
+          key = load_pem_private_key(
+              private_key.encode(),
+              password=os.environ['PRIVATE_KEY_PASSPHRASE'].encode(),
+              backend=default_backend()
+          )
+
           conn = snowflake.connector.connect(
               account=os.environ['SNOWFLAKE_ACCOUNT'],
               user=os.environ['DBT_USER'],
-              private_key_path='private_key.pem',
-              private_key_passphrase=os.environ['PRIVATE_KEY_PASSPHRASE'],
+              private_key=key,
               role='DBT_ROLE',
               warehouse='DEV_WH',
               database='SUPPLY_CHAIN'
           )
           conn.cursor().execute(f"DROP SCHEMA IF EXISTS SUPPLY_CHAIN.PR_{os.environ['GITHUB_RUN_ID']}")
           conn.close()
+          print(f"Dropped schema PR_{os.environ['GITHUB_RUN_ID']}")
           EOF
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
           DBT_USER: ${{ secrets.DBT_USER }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+          PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
