@@ -2,7 +2,7 @@
 with stg as (
     select * from {{ ref('stg_supply_chain') }}
 )
-
+--Testing for circle ci
 select
     supplier_name,
     sku,
