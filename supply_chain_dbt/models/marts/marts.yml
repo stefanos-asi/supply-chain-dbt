@@ -30,7 +30,7 @@ models:
           - unique
           - not_null
 
-  - name: vw_supplier_volatility
+  - name: agg_supplier_volatility
     description: "Supplier risk scoring model"
     columns:
       - name: supplier_name
