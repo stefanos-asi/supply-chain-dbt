@@ -1,0 +1,96 @@
+name: dbt CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  dbt_run:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt
+        run: pip install dbt-snowflake==1.8.4
+
+      - name: Write private key file
+        run: |
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+
+      - name: Set up dbt profiles
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml << EOF
+          supply_chain_dbt:
+            target: ${{ github.ref == 'refs/heads/main' && 'prod' || 'ci' }}
+            outputs:
+              ci:
+                type: snowflake
+                account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+                user: "${{ secrets.DBT_USER }}"
+                role: DBT_ROLE
+                private_key_path: private_key.pem
+                private_key_passphrase: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"
+                database: SUPPLY_CHAIN
+                schema: "PR_${{ github.run_id }}"
+                warehouse: DEV_WH
+                threads: 4
+              prod:
+                type: snowflake
+                account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+                user: "${{ secrets.DBT_USER }}"
+                role: DBT_ROLE
+                private_key_path: private_key.pem
+                private_key_passphrase: "${{ secrets.PRIVATE_KEY_PASSPHRASE }}"
+                database: SUPPLY_CHAIN
+                schema: PROD
+                warehouse: DEV_WH
+                threads: 4
+          EOF
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Seed data
+        run: dbt seed
+
+      - name: Run dbt (PR branch)
+        if: github.event_name == 'pull_request'
+        run: dbt build --target ci
+
+      - name: Run dbt (main branch)
+        if: github.ref == 'refs/heads/main'
+        run: dbt build --target prod
+
+      - name: Drop CI schema (cleanup)
+        if: github.event_name == 'pull_request'
+        run: |
+          python - <<EOF
+          import snowflake.connector
+          import os
+          conn = snowflake.connector.connect(
+              account=os.environ['SNOWFLAKE_ACCOUNT'],
+              user=os.environ['DBT_USER'],
+              private_key_path='private_key.pem',
+              private_key_passphrase=os.environ['PRIVATE_KEY_PASSPHRASE'],
+              role='DBT_ROLE',
+              warehouse='DEV_WH',
+              database='SUPPLY_CHAIN'
+          )
+          conn.cursor().execute(f"DROP SCHEMA IF EXISTS SUPPLY_CHAIN.PR_{os.environ['GITHUB_RUN_ID']}")
+          conn.close()
+          EOF
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
+          DBT_USER: ${{ secrets.DBT_USER }}
