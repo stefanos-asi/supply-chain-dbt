@@ -22,12 +22,21 @@ jobs:
       - name: Install dbt
         run: pip install dbt-snowflake==1.8.4 snowflake-connector-python cryptography
 
+      - name: Set target
+        id: set_target
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "target=prod" >> $GITHUB_OUTPUT
+          else
+            echo "target=ci" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up dbt profiles
         run: |
           mkdir -p ~/.dbt
-          cat > ~/.dbt/profiles.yml << 'EOF'
+          cat > ~/.dbt/profiles.yml << EOF
           supply_chain_dbt:
-            target: ci
+            target: ${{ steps.set_target.outputs.target }}
             outputs:
               ci:
                 type: snowflake
