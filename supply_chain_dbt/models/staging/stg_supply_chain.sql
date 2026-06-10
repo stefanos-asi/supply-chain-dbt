@@ -2,7 +2,7 @@ with source as (
     SELECT *
     FROM {{ source('raw', 'raw_supply_chain') }}
 )
-
+--start of transformations
 select
     sku,
     product_type,
