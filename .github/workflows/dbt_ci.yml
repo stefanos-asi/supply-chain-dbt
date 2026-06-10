@@ -20,14 +20,14 @@ jobs:
           python-version: "3.12"
 
       - name: Install dbt
-        run: pip install dbt-snowflake==1.8.4
+        run: pip install dbt-snowflake==1.8.4 snowflake-connector-python cryptography
 
       - name: Set up dbt profiles
         run: |
           mkdir -p ~/.dbt
           cat > ~/.dbt/profiles.yml << 'EOF'
           supply_chain_dbt:
-            target: ${{ github.ref == 'refs/heads/main' && 'prod' || 'ci' }}
+            target: ci
             outputs:
               ci:
                 type: snowflake
@@ -61,31 +61,66 @@ jobs:
         working-directory: supply_chain_dbt
         run: dbt seed
 
-      - name: Run dbt (PR branch)
+      # download prod manifest for slim CI comparison
+      - name: Download prod manifest
+        if: github.event_name == 'pull_request'
+        uses: actions/cache@v3
+        with:
+          path: supply_chain_dbt/prod_manifest/manifest.json
+          key: prod-manifest
+        continue-on-error: true
+
+      # PR — only build changed models and their downstream dependencies
+      - name: Run dbt slim CI (PR branch)
         if: github.event_name == 'pull_request'
         working-directory: supply_chain_dbt
-        run: dbt build --target ci
+        run: |
+          if [ -f prod_manifest/manifest.json ]; then
+            echo "Manifest found — running slim CI"
+            dbt build --target ci \
+              --select state:modified+ \
+              --defer \
+              --state prod_manifest/
+          else
+            echo "No manifest found — running full build"
+            dbt build --target ci
+          fi
 
+      # merge to main — full prod build
       - name: Run dbt (main branch)
         if: github.ref == 'refs/heads/main'
         working-directory: supply_chain_dbt
         run: dbt build --target prod
 
-      - name: Drop CI schema (cleanup)
+      # save prod manifest after successful prod run
+      - name: Save prod manifest
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache@v3
+        with:
+          path: supply_chain_dbt/target/manifest.json
+          key: prod-manifest
+
+      # copy manifest to prod_manifest folder for next PR comparison
+      - name: Copy manifest for future PRs
+        if: github.ref == 'refs/heads/main'
+        working-directory: supply_chain_dbt
+        run: |
+          mkdir -p prod_manifest
+          cp target/manifest.json prod_manifest/manifest.json
+
+      # drop throwaway CI schemas
+      - name: Drop CI schemas
         if: github.event_name == 'pull_request'
         working-directory: supply_chain_dbt
         run: |
           python - <<EOF
           import snowflake.connector
           import os
-
-          private_key = os.environ['SNOWFLAKE_PRIVATE_KEY']
-
           from cryptography.hazmat.primitives.serialization import load_pem_private_key
           from cryptography.hazmat.backends import default_backend
 
           key = load_pem_private_key(
-              private_key.encode(),
+              os.environ['SNOWFLAKE_PRIVATE_KEY'].encode(),
               password=os.environ['PRIVATE_KEY_PASSPHRASE'].encode(),
               backend=default_backend()
           )
@@ -101,13 +136,14 @@ jobs:
 
           run_id = os.environ['GITHUB_RUN_ID']
           schemas = [
-                f"PR_{run_id}_ANALYTICS",
-                f"PR_{run_id}_STAGING",
-                f"PR_{run_id}",  # fallback
-            ]
+              f"PR_{run_id}_ANALYTICS",
+              f"PR_{run_id}_STAGING",
+              f"PR_{run_id}",
+          ]
           for schema in schemas:
-            conn.cursor().execute(f"DROP SCHEMA IF EXISTS SUPPLY_CHAIN.{schema}")
-            print(f"Dropped schema {schema}")
+              conn.cursor().execute(f"DROP SCHEMA IF EXISTS SUPPLY_CHAIN.{schema}")
+              print(f"Dropped schema {schema}")
+
           conn.close()
           EOF
         env:
@@ -116,3 +152,11 @@ jobs:
           SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
           PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+
+      # notify on failure
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Pipeline failed on ${{ github.ref }} — triggered by ${{ github.actor }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
