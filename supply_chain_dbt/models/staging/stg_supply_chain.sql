@@ -2,7 +2,7 @@ with source as (
     SELECT *
     FROM {{ source('raw', 'raw_supply_chain') }}
 )
-
+--test circle ci
 select
     sku,
     product_type,
