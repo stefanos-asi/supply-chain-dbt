@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: fct_supply_chain
+    description: "SKU-level fact table"
+    columns:
+      - name: sku
+        tests:
+          - not_null
+
+      - name: revenue
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+  - name: dim_product
+    description: "Product dimension"
+    columns:
+      - name: sku
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_supplier
+    description: "Supplier dimension"
+    columns:
+      - name: supplier_name
+        tests:
+          - unique
+          - not_null
+
+  - name: vw_supplier_volatility
+    description: "Supplier risk scoring model"
+    columns:
+      - name: supplier_name
+        tests:
+          - unique
+          - not_null
+
+      - name: volatility_risk_score
+        tests:
+          - not_null
+
+      - name: risk_category
+        tests:
+          - accepted_values:
+              values:
+                - STABLE
+                - MODERATE
+                - HIGH VOLATILITY
+                - CRITICAL VOLATILITY

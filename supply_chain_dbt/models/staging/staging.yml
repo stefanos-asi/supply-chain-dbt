@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: stg_supply_chain
+    description: "Cleaned and typed supply chain data"
+
+    columns:
+      - name: sku
+        tests:
+          - not_null
+          - unique
+
+      - name: supplier_name
+        tests:
+          - not_null
+
+      - name: defect_rate
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: error
+
+      - name: revenue
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              config:
+                severity: error
+
+      - name: lead_time_days
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              config:
+                severity: warn
+
+    tests:
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          column_A: revenue
+          column_B: total_costs
+          or_equal: true
+          config:
+            severity: warn

@@ -1,0 +1,33 @@
+version: 2
+
+sources:
+    - name: raw
+      database: SUPPLY_CHAIN
+      schema: RAW
+      tables:
+        - name: raw_supply_chain
+          description: "Raw supply chain data ingested from supabase"
+          columns:
+            - name: sku
+              description: "Stock Keeping Unit, a unique identifier for each product"
+              tests:
+                - not_null
+                - unique
+            - name: supplier_name
+              description: "Name of the supplier providing the product"
+              tests:
+                - not_null
+            - name: revenue_generated
+              description: "Revenue generated from the product"
+              tests:
+                - not_null
+                - dbt_utils.accepted_range:
+                    min_value: 0
+            - name: defect_rates
+              description: "Percentage of defective products"
+              tests:
+                - not_null
+                - dbt_utils.accepted_range:
+                    min_value: 0
+                    max_value: 100
+            

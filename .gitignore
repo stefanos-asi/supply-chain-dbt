@@ -1,0 +1,7 @@
+.env
+private_key.pem
+public_key.pem
+.venv/
+supply_chain_dbt/target/
+supply_chain_dbt/dbt_packages/
+logs/
