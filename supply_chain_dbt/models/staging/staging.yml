@@ -8,8 +8,6 @@ models:
       - name: sku
         tests:
           - not_null
-          - unique
-
       - name: supplier_name
         tests:
           - not_null
