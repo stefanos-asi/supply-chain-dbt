@@ -1,7 +1,4 @@
-Replace the `Download prod manifest` step and add the upload step after the prod run. Here's the full updated file:
-
 name: dbt CI/CD
-
 on:
   pull_request:
     branches: [main]
