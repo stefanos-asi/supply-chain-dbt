@@ -1,3 +1,5 @@
+Replace the `Download prod manifest` step and add the upload step after the prod run. Here's the full updated file:
+
 name: dbt CI/CD
 
 on:
@@ -70,16 +72,14 @@ jobs:
         working-directory: supply_chain_dbt
         run: dbt seed
 
-      # download prod manifest for slim CI comparison
       - name: Download prod manifest
         if: github.event_name == 'pull_request'
-        uses: actions/cache@v3
+        uses: actions/download-artifact@v3
         with:
-          path: supply_chain_dbt/prod_manifest/manifest.json
-          key: prod-manifest
+          name: prod-manifest
+          path: supply_chain_dbt/prod_manifest/
         continue-on-error: true
 
-      # PR — only build changed models and their downstream dependencies
       - name: Run dbt slim CI (PR branch)
         if: github.event_name == 'pull_request'
         working-directory: supply_chain_dbt
@@ -95,29 +95,19 @@ jobs:
             dbt build --target ci
           fi
 
-      # merge to main — full prod build
       - name: Run dbt (main branch)
         if: github.ref == 'refs/heads/main'
         working-directory: supply_chain_dbt
         run: dbt build --target prod
 
-      # save prod manifest after successful prod run
-      - name: Save prod manifest
+      - name: Upload prod manifest
         if: github.ref == 'refs/heads/main'
-        uses: actions/cache@v3
+        uses: actions/upload-artifact@v3
         with:
+          name: prod-manifest
           path: supply_chain_dbt/target/manifest.json
-          key: prod-manifest
+          retention-days: 90
 
-      # copy manifest to prod_manifest folder for next PR comparison
-      - name: Copy manifest for future PRs
-        if: github.ref == 'refs/heads/main'
-        working-directory: supply_chain_dbt
-        run: |
-          mkdir -p prod_manifest
-          cp target/manifest.json prod_manifest/manifest.json
-
-      # drop throwaway CI schemas
       - name: Drop CI schemas
         if: github.event_name == 'pull_request'
         working-directory: supply_chain_dbt
@@ -162,7 +152,6 @@ jobs:
           PRIVATE_KEY_PASSPHRASE: ${{ secrets.PRIVATE_KEY_PASSPHRASE }}
           GITHUB_RUN_ID: ${{ github.run_id }}
 
-      # notify on failure
       - name: Notify on failure
         if: failure()
         run: |
