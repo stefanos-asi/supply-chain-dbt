@@ -70,11 +70,13 @@ jobs:
 
       - name: Download prod manifest
         if: github.event_name == 'pull_request'
-        uses: actions/download-artifact@v4
+        uses: dawidd6/action-download-artifact@v6
         with:
           name: prod-manifest
           path: supply_chain_dbt/prod_manifest/
-        continue-on-error: true
+          workflow: dbt_ci.yml
+          branch: main
+          if_no_artifact_found: warn
 
       - name: Run dbt slim CI (PR branch)
         if: github.event_name == 'pull_request'
