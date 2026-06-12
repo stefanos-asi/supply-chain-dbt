@@ -1,0 +1,6 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.dagster]
+module_name = "supply_chain.definitions"
