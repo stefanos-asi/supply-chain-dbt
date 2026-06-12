@@ -4,7 +4,7 @@
         schema='ANALYTICS'
     )
 }}
-
+--Ci test
 with fct as (
     select * from {{ ref('fct_supply_chain') }}
 )
