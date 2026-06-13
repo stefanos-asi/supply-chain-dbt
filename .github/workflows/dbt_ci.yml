@@ -64,9 +64,11 @@ jobs:
         working-directory: supply_chain_dbt
         run: dbt deps
 
-      - name: Seed data
+      - name: Seed data (CI only)
+        if: github.event_name == 'pull_request'
         working-directory: supply_chain_dbt
         run: dbt seed
+
 
       - name: Download prod manifest
         if: github.event_name == 'pull_request'
@@ -92,11 +94,11 @@ jobs:
             echo "No manifest found — running full build"
             dbt build --target ci
           fi
-
-      - name: Run dbt (main branch)
+          
+      - name: Run dbt (main branch — no seed, Dagster owns RAW)
         if: github.ref == 'refs/heads/main'
         working-directory: supply_chain_dbt
-        run: dbt build --target prod
+        run: dbt build --target prod --exclude resource_type:seed
 
       - name: Upload prod manifest
         if: github.ref == 'refs/heads/main'

@@ -2,6 +2,9 @@ from dagster import EnvVar
 from dagster_snowflake import SnowflakeResource
 from dagster_dbt import DbtCliResource
 import os
+from dagster_slack import SlackResource
+
+slack_resource = SlackResource(token=EnvVar("SLACK_WEBHOOK_URL"))
 
 PROJECT_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../../supply_chain_dbt")
