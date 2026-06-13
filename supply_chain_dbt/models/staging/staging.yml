@@ -8,6 +8,7 @@ models:
       - name: sku
         tests:
           - not_null
+
       - name: supplier_name
         tests:
           - not_null
@@ -16,9 +17,8 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              arguments:
-                min_value: 0
-                max_value: 100
+              min_value: 0
+              max_value: 100
               config:
                 severity: error
 
