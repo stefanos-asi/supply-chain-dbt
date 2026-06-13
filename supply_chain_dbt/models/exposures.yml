@@ -1,0 +1,46 @@
+version: 2
+
+exposures:
+
+  - name: power_bi_supply_chain_dashboard
+    label: "Supply Chain Analytics — Power BI"
+    type: dashboard
+    maturity: high
+    description: |
+      Power BI dashboard for executive supplier risk monitoring.
+      Displays volatility rankings, supplier efficiency, inventory risk,
+      and product performance metrics.
+
+    url: https://app.powerbi.com/your-workspace-link
+    owner:
+      name: Stefanos Asiklaris
+      email: asiklarisstefanos@gmail.com
+
+    depends_on:
+      - ref('fct_supply_chain')
+      - ref('dim_supplier')
+      - ref('dim_supplier_loc')
+      - ref('dim_product')
+      - ref('dim_logistics')
+      - ref('agg_supplier_volatility')
+      - ref('agg_supplier_vol_unpivot')
+      - ref('agg_supplier_efficiency')
+      - ref('agg_product_performance')
+      - ref('agg_inventory_risk')
+
+  - name: streamlit_supplier_risk_prediction
+    label: "Supplier Risk Prediction — Streamlit ML App"
+    type: ml
+    maturity: medium
+    description: |
+      Streamlit application predicting supplier volatility risk scores
+      using XGBoost. Allows manual input simulation and real supplier lookup.
+
+    url: https://your-streamlit-app.streamlit.app
+    owner:
+      name: Stefanos Asiklaris
+      email: asiklarisstefanos@gmail.com
+
+    depends_on:
+      - ref('fct_supply_chain')
+      - ref('agg_supplier_volatility')
