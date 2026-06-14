@@ -1,6 +1,6 @@
 # Supplier Risk Intelligence Platform
 
-> End-to-end supply chain data engineering platform — from raw operational data to machine learning risk predictions — built on the modern data stack.
+> End-to-end data platform built on MDS, Power BI & Streamlit
 
 ![dbt](https://img.shields.io/badge/dbt-1.8.4-FF694B?style=flat&logo=dbt&logoColor=white)
 ![Snowflake](https://img.shields.io/badge/Snowflake-29B5E8?style=flat&logo=snowflake&logoColor=white)
@@ -18,7 +18,7 @@ Supply chain risk is hard to quantify because averages hide volatility. A suppli
 
 This platform measures **unpredictability directly**. It computes supplier-level volatility metrics (standard deviation across SKUs), normalises them into z-scores, and combines them into a composite risk score. Every supplier gets a score and a category: STABLE, MODERATE, HIGH VOLATILITY, or CRITICAL VOLATILITY.
 
-The result is a fully automated, production-grade pipeline that runs daily, tests itself, alerts on failure, and serves both a BI dashboard and an ML prediction app.
+The result is a production-grade pipeline that runs daily, tests itself, alerts on failure, and serves both a BI dashboard and an ML prediction app.
 
 ---
 
@@ -51,8 +51,8 @@ The result is a fully automated, production-grade pipeline that runs daily, test
 | Warehouse | Snowflake | Cloud analytical warehouse (Azure West Europe) |
 | Transformation | dbt | Staged transformations, tests, macros, CI/CD |
 | CI/CD | GitHub Actions | Slim CI on PRs, full prod build on merge |
-| BI | Power BI | Executive dashboards (Import mode, Snowflake connection) |
-| ML | Python + Streamlit | Ridge/XGBoost regression, live predictions |
+| BI | Power BI | Executive dashboard (Import mode, Snowflake connection) |
+| ML | Python + Streamlit | live risk predictions |
 
 ---
 
@@ -134,7 +134,7 @@ score = z(revenue_volatility)    × 0.30
 
 The formula is implemented in three places kept in sync:
 1. **dbt** — `agg_supplier_volatility.sql` (source of truth)
-2. **Python** — `supply_utils.py compute_supplier_stats()` (mirrors the SQL CTEs)
+2. **Python** — `supply_utils.py compute_supplier_stats()` (mirrors the SQL)
 3. **Test** — `test_parity.py` verifies both produce identical results to ±0.01
 
 ---
@@ -214,25 +214,6 @@ dbt seed && dbt build
 
 ### Snowflake Setup
 
-```sql
-CREATE WAREHOUSE IF NOT EXISTS DEV_WH WAREHOUSE_SIZE='XSMALL' AUTO_SUSPEND=60 AUTO_RESUME=TRUE;
-CREATE DATABASE IF NOT EXISTS SUPPLY_CHAIN;
-USE DATABASE SUPPLY_CHAIN;
-CREATE SCHEMA IF NOT EXISTS RAW;
-CREATE ROLE IF NOT EXISTS DBT_ROLE;
-GRANT USAGE ON WAREHOUSE DEV_WH TO ROLE DBT_ROLE;
-GRANT ALL ON DATABASE SUPPLY_CHAIN TO ROLE DBT_ROLE;
-GRANT ALL ON FUTURE SCHEMAS IN DATABASE SUPPLY_CHAIN TO ROLE DBT_ROLE;
-GRANT ALL ON FUTURE TABLES IN DATABASE SUPPLY_CHAIN TO ROLE DBT_ROLE;
-CREATE USER IF NOT EXISTS DBT_USER DEFAULT_ROLE=DBT_ROLE DEFAULT_WAREHOUSE=DEV_WH MUST_CHANGE_PASSWORD=FALSE;
-GRANT ROLE DBT_ROLE TO USER DBT_USER;
--- ALTER USER DBT_USER SET RSA_PUBLIC_KEY='your_public_key';
-CREATE USER IF NOT EXISTS PBI_USER PASSWORD='your_password' DEFAULT_ROLE=DBT_ROLE DEFAULT_WAREHOUSE=DEV_WH MUST_CHANGE_PASSWORD=FALSE;
-GRANT ROLE DBT_ROLE TO USER PBI_USER;
-```
-
----
-
 ## GitHub Secrets
 
 | Secret | Description |
@@ -245,18 +226,6 @@ GRANT ROLE DBT_ROLE TO USER PBI_USER;
 | `SNOWFLAKE_CI_PRIVATE_KEY` | CI private key |
 | `SNOWFLAKE_PROD_PRIVATE_KEY` | Prod private key |
 | `PRIVATE_KEY_PASSPHRASE` | RSA key passphrase |
-
----
-
-## ML Model
-
-The [Streamlit app](https://supplier-risk-app-zbkocpafdc2rd8c93zcznq.streamlit.app/) predicts `volatility_risk_score` from 11 features (3 SKU-level + 8 supplier-level) using Ridge Regression.
-
-**Key decisions:**
-- **Regression not classification** — the risk category is a deterministic bucketing of the continuous score; classifying would lose information
-- **Ridge preferred over XGBoost** — the target is a weighted linear combination of features by construction; simpler model wins when performance is equal (Occam's razor)
-- **Synthetic augmentation** — 800 samples generated with 8% Gaussian noise; target recomputed from noisy features to prevent leakage
-- **Hold-out evaluation on real data only** — honest performance estimates, never evaluated on synthetic samples
 
 ---
 
@@ -277,6 +246,30 @@ The [Streamlit app](https://supplier-risk-app-zbkocpafdc2rd8c93zcznq.streamlit.a
 
 - [**supplier-risk-app**](https://github.com/stefanos-asi/supplier-risk-app) — Streamlit ML application
 - [**Portfolio**](https://stefanos-asi.github.io/portfolio_website/)
+
+---
+
+## ML Model
+
+The [Streamlit app](https://supplier-risk-app-zbkocpafdc2rd8c93zcznq.streamlit.app/) predicts `volatility_risk_score` 
+from 11 features (3 SKU-level + 8 supplier-level). The winning model is selected 
+automatically on each training run based on hold-out R².
+
+**Model comparison:** Four models are trained and compared on every run:
+
+| Model | Notes |
+|---|---|
+| Linear Regression | Baseline — no regularisation |
+| Ridge Regression | L2 regularisation — preferred on small datasets |
+| Random Forest | Checks for non-linear interaction effects |
+| XGBoost | Gradient boosted trees — most powerful but hardest to justify on a linear target |
+
+**Selection logic:** The model with the highest hold-out R² on real data wins.
+
+**Key decisions:**
+- **Regression not classification** — the risk category is a deterministic bucketing of the continuous score; classifying would just learn threshold rules and lose information
+- **Synthetic augmentation** — 800 samples generated with 8% Gaussian noise; target recomputed from noisy features to prevent data leakage
+- **Hold-out evaluation on real data only** — model is never evaluated on synthetic samples, giving honest performance estimates
 
 ---
 
