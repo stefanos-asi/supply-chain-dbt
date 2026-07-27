@@ -275,6 +275,6 @@ automatically on each training run based on hold-out R².
 
 ## Author
 
-**Stefanos Asiklaris** — Senior Associate, Data, Insights & Business Solutions at PwC Cyprus
+**Stefanos Asiklaris** — Assistant Manager at PwC
 
 [LinkedIn](https://www.linkedin.com/in/stefanos-asiklaris-899952283/) · [Portfolio](https://stefanos-asi.github.io/portfolio_website/) · asiklarisstefanos@gmail.com
